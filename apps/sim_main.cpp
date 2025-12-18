@@ -1,4 +1,5 @@
 #include "hft/engine.hpp"
+#include "hft/generator.hpp"
 #include "hft/tape.hpp"
 
 #include <filesystem>
@@ -41,14 +42,74 @@ static std::string get_tape_path(int argc, char** argv) {
   return "out/tape.csv";
 }
 
+static std::string get_str_arg(int argc, char** argv, const std::string& key, const std::string& def) {
+  for (int i = 1; i + 1 < argc; ++i) {
+    if (std::string(argv[i]) == key) return std::string(argv[i + 1]);
+  }
+  return def;
+}
+
+static std::uint64_t get_u64_arg(int argc, char** argv, const std::string& key, std::uint64_t def) {
+  for (int i = 1; i + 1 < argc; ++i) {
+    if (std::string(argv[i]) == key) {
+      try {
+        return static_cast<std::uint64_t>(std::stoull(argv[i + 1]));
+      } catch (...) {
+        return def;
+      }
+    }
+  }
+  return def;
+}
+
+static std::size_t get_size_arg(int argc, char** argv, const std::string& key, std::size_t def) {
+  for (int i = 1; i + 1 < argc; ++i) {
+    if (std::string(argv[i]) == key) {
+      try {
+        return static_cast<std::size_t>(std::stoull(argv[i + 1]));
+      } catch (...) {
+        return def;
+      }
+    }
+  }
+  return def;
+}
+
+static bool has_flag(int argc, char** argv, const std::string& key) {
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == key) return true;
+  }
+  return false;
+}
+
 int main(int argc, char** argv) {
   const std::string tape_path = get_tape_path(argc, argv);
 
   std::cout << "TAPE_PATH " << tape_path << "\n";
 
+  const std::string scenario = get_str_arg(argc, argv, "--scenario", "fifo_demo");
+  const std::uint64_t seed = get_u64_arg(argc, argv, "--seed", 1ULL);
+  const std::size_t n = get_size_arg(argc, argv, "--n", 1000);
+  const bool overwrite = has_flag(argc, argv, "--overwrite");
+
+  std::cout << "SCENARIO " << scenario << "\n";
+  std::cout << "SEED " << seed << "\n";
+  std::cout << "N_EVENTS " << n << "\n";
+  std::cout << "OVERWRITE " << (overwrite ? "true" : "false") << "\n";
+
   const bool exists = std::filesystem::exists(tape_path);
-  if (!exists) {
-    const auto events = default_scenario();
+  if (!exists || overwrite) {
+    std::vector<hft::Event> events;
+
+    if (scenario == "fifo_demo") {
+      events = default_scenario();
+    } else if (scenario == "gen_v1") {
+      events = hft::generate_events_gen_v1(seed, n, /*mid_px=*/101, /*spread_ticks=*/5);
+    } else {
+      std::cout << "BAD_SCENARIO (use fifo_demo or gen_v1)\n";
+      return 1;
+    }
+
     std::string err;
     if (!hft::write_events_csv(tape_path, events, &err)) {
       std::cout << "TAPE_WRITE_ERR " << err << "\n";

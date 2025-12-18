@@ -12,6 +12,7 @@ add_library(hft_core
     src/order_book.cpp
     src/engine.cpp
     src/tape.cpp
+    src/generator.cpp
 )
 
 target_include_directories(hft_core PUBLIC
