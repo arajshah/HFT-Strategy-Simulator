@@ -1,7 +1,9 @@
 #include "hft/order_book.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <sstream>
+#include <unordered_set>
 
 namespace hft {
 
@@ -9,6 +11,80 @@ std::int64_t OrderBook::level_total_qty(const Queue& q) {
   std::int64_t total = 0;
   for (const auto& o : q) total += o.qty;
   return total;
+}
+
+bool OrderBook::has_live_id(Order::OrderId id) const {
+  return live_.find(id) != live_.end();
+}
+
+void OrderBook::erase_level_if_empty(Side side, std::int64_t price_ticks) {
+  if (side == Side::Buy) {
+    auto it = bids_.find(price_ticks);
+    if (it != bids_.end() && it->second.empty()) bids_.erase(it);
+  } else {
+    auto it = asks_.find(price_ticks);
+    if (it != asks_.end() && it->second.empty()) asks_.erase(it);
+  }
+}
+
+void OrderBook::debug_assert_invariants() const {
+#ifndef NDEBUG
+  // 1) No empty queues stored in the maps.
+  for (const auto& [px, q] : bids_) {
+    assert(!q.empty() && "bids_ contains an empty price level queue");
+    (void)px;
+  }
+  for (const auto& [px, q] : asks_) {
+    assert(!q.empty() && "asks_ contains an empty price level queue");
+    (void)px;
+  }
+
+  // 2) All resting orders are live, have qty > 0, correct side, correct price level key,
+  //    and have unique IDs. Also build the set of IDs observed in the book.
+  std::unordered_set<Order::OrderId> seen_ids;
+  seen_ids.reserve(live_.size() * 2 + 8);
+
+  auto scan_side = [&](Side side) {
+    if (side == Side::Buy) {
+      for (const auto& [px, q] : bids_) {
+        for (const auto& o : q) {
+          assert(o.qty > 0 && "resting bid has non-positive qty");
+          assert(o.side == Side::Buy && "resting bid has wrong side");
+          assert(o.price_ticks == px && "resting bid price_ticks != level key");
+          const bool inserted = seen_ids.insert(o.id).second;
+          assert(inserted && "duplicate order id found in book");
+          const auto it = live_.find(o.id);
+          assert(it != live_.end() && "order in book missing from live_ index");
+          assert(it->second.side == Side::Buy && "live_ side mismatch for resting bid");
+          assert(it->second.price_ticks == px && "live_ price mismatch for resting bid");
+        }
+      }
+    } else {
+      for (const auto& [px, q] : asks_) {
+        for (const auto& o : q) {
+          assert(o.qty > 0 && "resting ask has non-positive qty");
+          assert(o.side == Side::Sell && "resting ask has wrong side");
+          assert(o.price_ticks == px && "resting ask price_ticks != level key");
+          const bool inserted = seen_ids.insert(o.id).second;
+          assert(inserted && "duplicate order id found in book");
+          const auto it = live_.find(o.id);
+          assert(it != live_.end() && "order in book missing from live_ index");
+          assert(it->second.side == Side::Sell && "live_ side mismatch for resting ask");
+          assert(it->second.price_ticks == px && "live_ price mismatch for resting ask");
+        }
+      }
+    }
+  };
+
+  scan_side(Side::Buy);
+  scan_side(Side::Sell);
+
+  // 3) live_ should not contain ids not present in the book.
+  for (const auto& [id, loc] : live_) {
+    (void)loc;
+    assert(seen_ids.find(id) != seen_ids.end() && "live_ contains id not present in book");
+  }
+#endif
 }
 
 std::optional<std::pair<std::int64_t, std::int64_t>> OrderBook::best_bid() const {
@@ -28,6 +104,14 @@ std::optional<std::pair<std::int64_t, std::int64_t>> OrderBook::best_ask() const
 std::vector<Fill> OrderBook::add_limit(const Order& incoming) {
   std::vector<Fill> fills;
   Order taker = incoming;
+
+  debug_assert_invariants();
+
+  // Reject nonsensical orders deterministically.
+  if (incoming.qty <= 0) return {};
+
+  // Disallow duplicate live order ids (deterministic no-op).
+  if (has_live_id(incoming.id)) return {};
 
   auto crosses = [&](std::int64_t bid_px, std::int64_t ask_px) {
     return bid_px >= ask_px;
@@ -112,10 +196,13 @@ std::vector<Fill> OrderBook::add_limit(const Order& incoming) {
     }
   }
 
+  debug_assert_invariants();
   return fills;
 }
 
 bool OrderBook::cancel(Order::OrderId id) {
+  debug_assert_invariants();
+
   const auto it = live_.find(id);
   if (it == live_.end()) return false;
 
@@ -133,7 +220,8 @@ bool OrderBook::cancel(Order::OrderId id) {
       if (oq->id == id) {
         q.erase(oq);
         live_.erase(it);
-        if (q.empty()) bids_.erase(lvl_it);
+        erase_level_if_empty(Side::Buy, loc.price_ticks);
+        debug_assert_invariants();
         return true;
       }
     }
@@ -150,14 +238,19 @@ bool OrderBook::cancel(Order::OrderId id) {
       if (oq->id == id) {
         q.erase(oq);
         live_.erase(it);
-        if (q.empty()) asks_.erase(lvl_it);
+        erase_level_if_empty(Side::Sell, loc.price_ticks);
+        debug_assert_invariants();
         return true;
       }
     }
   }
 
-  // If we got here, index was stale.
+#ifndef NDEBUG
+  assert(false && "live_ index stale: id not found in indicated price level queue");
+#endif
+  // Self-heal in release builds.
   live_.erase(it);
+  debug_assert_invariants();
   return false;
 }
 
