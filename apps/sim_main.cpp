@@ -1,6 +1,7 @@
 #include "hft/bench.hpp"
 #include "hft/engine.hpp"
 #include "hft/generator.hpp"
+#include "hft/pipeline.hpp"
 #include "hft/tape.hpp"
 
 #include <filesystem>
@@ -130,10 +131,12 @@ int main(int argc, char** argv) {
   std::cout << "TAPE_LOADED_OK events=" << loaded.size() << "\n";
   const bool bench = has_flag(argc, argv, "--bench");
   std::cout << "BENCH_MODE " << (bench ? "true" : "false") << "\n";
+  const bool pipeline = has_flag(argc, argv, "--pipeline");
+  std::cout << "PIPELINE_MODE " << (pipeline ? "true" : "false") << "\n";
 
   if (bench) {
     // Run once and print timing/throughput metrics.
-    const auto br = hft::bench_run(loaded);
+    const auto br = pipeline ? hft::bench_run_pipeline(loaded) : hft::bench_run(loaded);
 
     std::cout << "BENCH_EVENTS " << br.n_events << "\n";
     std::cout << "BENCH_ADD " << br.n_add << "\n";
@@ -149,14 +152,20 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  // Run #1 (from loaded tape)
-  hft::Engine e1;
-  const auto r1 = e1.run(loaded);
-  const auto sig1 = hft::fills_signature(r1.fills);
+  hft::RunResult r1;
+  hft::RunResult r2;
 
-  // Run #2 (replay same loaded tape into a fresh engine)
-  hft::Engine e2;
-  const auto r2 = e2.run(loaded);
+  if (pipeline) {
+    r1 = hft::pipeline_run(loaded);
+    r2 = hft::pipeline_run(loaded);
+  } else {
+    hft::Engine e1;
+    r1 = e1.run(loaded);
+    hft::Engine e2;
+    r2 = e2.run(loaded);
+  }
+
+  const auto sig1 = hft::fills_signature(r1.fills);
   const auto sig2 = hft::fills_signature(r2.fills);
 
   std::cout << "RUN1_SIG " << sig1 << "\n";

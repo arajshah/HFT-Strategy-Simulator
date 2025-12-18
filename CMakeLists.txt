@@ -14,6 +14,7 @@ add_library(hft_core
     src/tape.cpp
     src/generator.cpp
     src/bench.cpp
+    src/pipeline.cpp
 )
 
 target_include_directories(hft_core PUBLIC

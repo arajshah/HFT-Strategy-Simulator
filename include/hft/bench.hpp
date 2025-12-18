@@ -26,5 +26,8 @@ struct BenchResult {
 // Note: timing is machine-dependent and not expected to be bit-identical across machines.
 BenchResult bench_run(std::vector<Event> events);
 
+// Same metrics, but executes via producer/consumer pipeline (Phase 7).
+BenchResult bench_run_pipeline(std::vector<Event> events);
+
 }  // namespace hft
 
