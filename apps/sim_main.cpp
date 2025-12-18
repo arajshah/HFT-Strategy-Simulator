@@ -1,36 +1,46 @@
-#include "hft/order_book.hpp"
+#include "hft/engine.hpp"
 
 #include <iostream>
+#include <vector>
 
 int main() {
-  hft::OrderBook ob;
+  // Deterministic event stream (no randomness in Phase 1)
+  std::vector<hft::Event> events;
+  std::uint64_t seq = 0;
 
-  // Seed scenario (deterministic, hard-coded for Phase 0).
-  // Prices are "ticks" (e.g. cents). Higher = more expensive.
-  // 1) Add some resting liquidity
-  ob.add_limit(hft::Order{.id = 1, .side = hft::Side::Sell, .price_ticks = 101, .qty = 50});
-  ob.add_limit(hft::Order{.id = 2, .side = hft::Side::Sell, .price_ticks = 102, .qty = 50});
-  ob.add_limit(hft::Order{.id = 3, .side = hft::Side::Buy,  .price_ticks =  99, .qty = 40});
-  ob.add_limit(hft::Order{.id = 4, .side = hft::Side::Buy,  .price_ticks = 100, .qty = 40});
+  // Seed liquidity at ts=1
+  events.push_back(hft::Event::add_limit(1, ++seq, hft::Order{.id = 1, .side = hft::Side::Sell, .price_ticks = 101, .qty = 50}));
+  events.push_back(hft::Event::add_limit(1, ++seq, hft::Order{.id = 2, .side = hft::Side::Sell, .price_ticks = 102, .qty = 50}));
+  events.push_back(hft::Event::add_limit(1, ++seq, hft::Order{.id = 3, .side = hft::Side::Buy,  .price_ticks =  99, .qty = 40}));
+  events.push_back(hft::Event::add_limit(1, ++seq, hft::Order{.id = 4, .side = hft::Side::Buy,  .price_ticks = 100, .qty = 40}));
 
-  std::cout << ob.to_string_top() << "\n";
+  // Aggressive buy at ts=2 (crosses best ask 101)
+  events.push_back(hft::Event::add_limit(2, ++seq, hft::Order{.id = 5, .side = hft::Side::Buy, .price_ticks = 101, .qty = 30}));
 
-  // 2) Submit an aggressive buy that crosses the ask at 101
-  auto fills = ob.add_limit(hft::Order{.id = 5, .side = hft::Side::Buy, .price_ticks = 101, .qty = 30});
-  for (const auto& f : fills) {
-    std::cout << "FILL taker=" << f.taker_id
-              << " maker=" << f.maker_id
-              << " px=" << f.price_ticks
-              << " qty=" << f.qty << "\n";
+  // Cancel a resting order at ts=3
+  events.push_back(hft::Event::cancel(3, ++seq, 2));
+
+  // Run #1
+  hft::Engine e1;
+  const auto r1 = e1.run(events);
+  const auto sig1 = hft::fills_signature(r1.fills);
+
+  // Run #2 (replay same events into a fresh engine)
+  hft::Engine e2;
+  const auto r2 = e2.run(events);
+  const auto sig2 = hft::fills_signature(r2.fills);
+
+  std::cout << "RUN1_SIG " << sig1 << "\n";
+  std::cout << "RUN2_SIG " << sig2 << "\n";
+  std::cout << "RUN1_TOP " << r1.final_top << "\n";
+  std::cout << "RUN2_TOP " << r2.final_top << "\n";
+
+  if (hft::fills_equal(r1.fills, r2.fills) && r1.final_top == r2.final_top) {
+    std::cout << "REPLAY_OK\n";
+    return 0;
   }
 
-  std::cout << ob.to_string_top() << "\n";
-
-  // 3) Cancel a resting order
-  const bool cancelled = ob.cancel(2);
-  std::cout << "CANCEL id=2 -> " << (cancelled ? "true" : "false") << "\n";
-  std::cout << ob.to_string_top() << "\n";
-
-  return 0;
+  std::cout << "REPLAY_MISMATCH\n";
+  return 1;
 }
 
