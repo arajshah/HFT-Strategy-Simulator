@@ -1,119 +1,164 @@
 #include "hft/order_book.hpp"
 
 #include <algorithm>
-#include <limits>
 #include <sstream>
 
 namespace hft {
 
-std::size_t OrderBook::find_best_bid_idx(const std::vector<Order>& bids) {
-  std::size_t best = std::numeric_limits<std::size_t>::max();
-  std::int64_t best_px = std::numeric_limits<std::int64_t>::min();
-
-  for (std::size_t i = 0; i < bids.size(); ++i) {
-    if (!is_live(bids[i])) continue;
-    if (bids[i].price_ticks > best_px) {
-      best_px = bids[i].price_ticks;
-      best = i;
-    }
-  }
-  return best;
-}
-
-std::size_t OrderBook::find_best_ask_idx(const std::vector<Order>& asks) {
-  std::size_t best = std::numeric_limits<std::size_t>::max();
-  std::int64_t best_px = std::numeric_limits<std::int64_t>::max();
-
-  for (std::size_t i = 0; i < asks.size(); ++i) {
-    if (!is_live(asks[i])) continue;
-    if (asks[i].price_ticks < best_px) {
-      best_px = asks[i].price_ticks;
-      best = i;
-    }
-  }
-  return best;
+std::int64_t OrderBook::level_total_qty(const Queue& q) {
+  std::int64_t total = 0;
+  for (const auto& o : q) total += o.qty;
+  return total;
 }
 
 std::optional<std::pair<std::int64_t, std::int64_t>> OrderBook::best_bid() const {
-  const auto idx = find_best_bid_idx(bids_);
-  if (idx == std::numeric_limits<std::size_t>::max()) return std::nullopt;
-
-  const auto px = bids_[idx].price_ticks;
-  std::int64_t total = 0;
-  for (const auto& o : bids_) if (is_live(o) && o.price_ticks == px) total += o.qty;
-  return std::make_pair(px, total);
+  if (bids_.empty()) return std::nullopt;
+  const auto it = bids_.begin();
+  if (it->second.empty()) return std::nullopt;
+  return std::make_pair(it->first, level_total_qty(it->second));
 }
 
 std::optional<std::pair<std::int64_t, std::int64_t>> OrderBook::best_ask() const {
-  const auto idx = find_best_ask_idx(asks_);
-  if (idx == std::numeric_limits<std::size_t>::max()) return std::nullopt;
-
-  const auto px = asks_[idx].price_ticks;
-  std::int64_t total = 0;
-  for (const auto& o : asks_) if (is_live(o) && o.price_ticks == px) total += o.qty;
-  return std::make_pair(px, total);
+  if (asks_.empty()) return std::nullopt;
+  const auto it = asks_.begin();
+  if (it->second.empty()) return std::nullopt;
+  return std::make_pair(it->first, level_total_qty(it->second));
 }
 
 std::vector<Fill> OrderBook::add_limit(const Order& incoming) {
   std::vector<Fill> fills;
-
-  // Copy so we can decrement remaining qty for this function.
   Order taker = incoming;
-
-  auto& my_side = (taker.side == Side::Buy) ? bids_ : asks_;
-  auto& opp_side = (taker.side == Side::Buy) ? asks_ : bids_;
 
   auto crosses = [&](std::int64_t bid_px, std::int64_t ask_px) {
     return bid_px >= ask_px;
   };
 
-  // Match while we cross and have qty.
-  while (taker.qty > 0) {
-    const auto best_opp_idx =
-        (taker.side == Side::Buy) ? find_best_ask_idx(opp_side) : find_best_bid_idx(opp_side);
+  if (taker.side == Side::Buy) {
+    // Match against asks (best ask = lowest price)
+    while (taker.qty > 0 && !asks_.empty()) {
+      auto best_it = asks_.begin();
+      const std::int64_t best_ask_px = best_it->first;
+      if (!crosses(taker.price_ticks, best_ask_px)) break;
 
-    if (best_opp_idx == std::numeric_limits<std::size_t>::max()) break;
+      auto& q = best_it->second;
+      while (taker.qty > 0 && !q.empty()) {
+        Order& maker = q.front();
+        const std::int64_t traded = std::min(taker.qty, maker.qty);
 
-    Order& maker = opp_side[best_opp_idx];
+        fills.push_back(Fill{
+            .taker_id = taker.id,
+            .maker_id = maker.id,
+            .price_ticks = best_ask_px,
+            .qty = traded,
+        });
 
-    const std::int64_t best_bid_px = (taker.side == Side::Buy) ? taker.price_ticks : maker.price_ticks;
-    const std::int64_t best_ask_px = (taker.side == Side::Buy) ? maker.price_ticks : taker.price_ticks;
+        taker.qty -= traded;
+        maker.qty -= traded;
 
-    if (!crosses(best_bid_px, best_ask_px)) break;
+        if (maker.qty == 0) {
+          live_.erase(maker.id);
+          q.pop_front();
+        }
+      }
 
-    const std::int64_t traded = std::min(taker.qty, maker.qty);
+      if (q.empty()) {
+        asks_.erase(best_it);
+      }
+    }
 
-    fills.push_back(Fill{
-        .taker_id = taker.id,
-        .maker_id = maker.id,
-        .price_ticks = maker.price_ticks,  // pay the resting price (maker)
-        .qty = traded,
-    });
+    // Rest remaining as a bid at taker.price_ticks (FIFO at level)
+    if (taker.qty > 0) {
+      bids_[taker.price_ticks].push_back(taker);
+      live_[taker.id] = Loc{.side = Side::Buy, .price_ticks = taker.price_ticks};
+    }
 
-    taker.qty -= traded;
-    maker.qty -= traded;
-  }
+  } else {  // Side::Sell
+    // Match against bids (best bid = highest price)
+    while (taker.qty > 0 && !bids_.empty()) {
+      auto best_it = bids_.begin();
+      const std::int64_t best_bid_px = best_it->first;
+      if (!crosses(best_bid_px, taker.price_ticks)) break;
 
-  // If leftover, rest it as a live order.
-  if (taker.qty > 0) {
-    my_side.push_back(taker);
+      auto& q = best_it->second;
+      while (taker.qty > 0 && !q.empty()) {
+        Order& maker = q.front();
+        const std::int64_t traded = std::min(taker.qty, maker.qty);
+
+        fills.push_back(Fill{
+            .taker_id = taker.id,
+            .maker_id = maker.id,
+            .price_ticks = best_bid_px,
+            .qty = traded,
+        });
+
+        taker.qty -= traded;
+        maker.qty -= traded;
+
+        if (maker.qty == 0) {
+          live_.erase(maker.id);
+          q.pop_front();
+        }
+      }
+
+      if (q.empty()) {
+        bids_.erase(best_it);
+      }
+    }
+
+    // Rest remaining as an ask at taker.price_ticks (FIFO at level)
+    if (taker.qty > 0) {
+      asks_[taker.price_ticks].push_back(taker);
+      live_[taker.id] = Loc{.side = Side::Sell, .price_ticks = taker.price_ticks};
+    }
   }
 
   return fills;
 }
 
 bool OrderBook::cancel(Order::OrderId id) {
-  auto kill = [&](std::vector<Order>& side) -> bool {
-    for (auto& o : side) {
-      if (o.id == id && is_live(o)) {
-        o.qty = 0;
+  const auto it = live_.find(id);
+  if (it == live_.end()) return false;
+
+  const Loc loc = it->second;
+
+  if (loc.side == Side::Buy) {
+    auto lvl_it = bids_.find(loc.price_ticks);
+    if (lvl_it == bids_.end()) {
+      live_.erase(it);
+      return false;
+    }
+
+    auto& q = lvl_it->second;
+    for (auto oq = q.begin(); oq != q.end(); ++oq) {
+      if (oq->id == id) {
+        q.erase(oq);
+        live_.erase(it);
+        if (q.empty()) bids_.erase(lvl_it);
         return true;
       }
     }
-    return false;
-  };
 
-  return kill(bids_) || kill(asks_);
+  } else {  // Side::Sell
+    auto lvl_it = asks_.find(loc.price_ticks);
+    if (lvl_it == asks_.end()) {
+      live_.erase(it);
+      return false;
+    }
+
+    auto& q = lvl_it->second;
+    for (auto oq = q.begin(); oq != q.end(); ++oq) {
+      if (oq->id == id) {
+        q.erase(oq);
+        live_.erase(it);
+        if (q.empty()) asks_.erase(lvl_it);
+        return true;
+      }
+    }
+  }
+
+  // If we got here, index was stale.
+  live_.erase(it);
+  return false;
 }
 
 std::string OrderBook::to_string_top() const {

@@ -3,8 +3,13 @@
 #include "hft/order.hpp"
 
 #include <cstdint>
+#include <deque>
+#include <functional>
+#include <map>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace hft {
@@ -32,18 +37,23 @@ class OrderBook {
   std::string to_string_top() const;
 
  private:
-  // Minimal L1/L2-ish structure for Phase 0:
-  // We keep explicit orders in vectors and match by price-time priority within best price.
-  // This is intentionally simple; we’ll replace with price-level queues later.
+  using Queue = std::deque<Order>;
 
-  std::vector<Order> bids_;  // buy orders
-  std::vector<Order> asks_;  // sell orders
+  // Price-level maps:
+  // - bids_: highest price first
+  // - asks_: lowest price first
+  std::map<std::int64_t, Queue, std::greater<std::int64_t>> bids_;
+  std::map<std::int64_t, Queue, std::less<std::int64_t>> asks_;
 
-  static bool is_live(const Order& o) { return o.qty > 0; }
+  struct Loc {
+    Side side{};
+    std::int64_t price_ticks{};
+  };
 
-  // Finds best index on a side (max bid, min ask). Returns npos if none live.
-  static std::size_t find_best_bid_idx(const std::vector<Order>& bids);
-  static std::size_t find_best_ask_idx(const std::vector<Order>& asks);
+  // Live order index: id -> (side, price_level)
+  std::unordered_map<Order::OrderId, Loc> live_;
+
+  static std::int64_t level_total_qty(const Queue& q);
 };
 
 }  // namespace hft
