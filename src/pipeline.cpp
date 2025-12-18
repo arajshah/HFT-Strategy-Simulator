@@ -4,14 +4,16 @@
 #include "hft/spsc_ring.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <thread>
+#include <vector>
 
 namespace hft {
 namespace {
 
 struct PipeMsg {
   bool is_end{false};
-  Event e{};
+  std::uint32_t idx{0};  // index into the sorted events vector
 };
 
 }  // namespace
@@ -25,14 +27,15 @@ RunResult pipeline_run(std::vector<Event> events) {
             });
 
   // Lock-free SPSC queue between producer and consumer.
-  // Power-of-two capacity; small enough to avoid huge memory, large enough for throughput.
   SpscRing<PipeMsg> q(1u << 16);
 
   RunResult out;
 
-  // Consumer: sole writer of the book
+  // Consumer: sole writer of the book and producer of fills
   std::thread consumer([&]() {
     OrderBook book;
+    std::vector<Fill> fills;
+    fills.reserve(1024);  // small seed reserve to reduce early reallocs
 
     PipeMsg msg{};
     while (true) {
@@ -42,11 +45,13 @@ RunResult pipeline_run(std::vector<Event> events) {
 
       if (msg.is_end) break;
 
-      const Event& e = msg.e;
+      const Event& e = events[msg.idx];
       switch (e.type) {
         case EventType::AddLimit: {
-          auto fills = book.add_limit(e.order);
-          out.fills.insert(out.fills.end(), fills.begin(), fills.end());
+          auto new_fills = book.add_limit(e.order);
+          if (!new_fills.empty()) {
+            fills.insert(fills.end(), new_fills.begin(), new_fills.end());
+          }
           break;
         }
         case EventType::Cancel: {
@@ -58,21 +63,25 @@ RunResult pipeline_run(std::vector<Event> events) {
       }
     }
 
+    out.fills = std::move(fills);
     out.final_top = book.to_string_top();
   });
 
-  // Producer: feeds already-sorted events
+  // Producer: feeds already-sorted events by index (avoids copying Event into the ring)
   std::thread producer([&]() {
-    for (const auto& e : events) {
+    const std::size_t n = events.size();
+    for (std::size_t i = 0; i < n; ++i) {
       PipeMsg m;
       m.is_end = false;
-      m.e = e;
+      m.idx = static_cast<std::uint32_t>(i);
       while (!q.try_push(m)) {
         std::this_thread::yield();
       }
     }
+
     PipeMsg end;
     end.is_end = true;
+    end.idx = 0;
     while (!q.try_push(end)) {
       std::this_thread::yield();
     }

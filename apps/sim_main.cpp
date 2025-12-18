@@ -135,19 +135,21 @@ int main(int argc, char** argv) {
   std::cout << "PIPELINE_MODE " << (pipeline ? "true" : "false") << "\n";
 
   if (bench) {
-    // Run once and print timing/throughput metrics.
-    const auto br = pipeline ? hft::bench_run_pipeline(loaded) : hft::bench_run(loaded);
+    const std::size_t iters = get_size_arg(argc, argv, "--iters", 1);
+    const bool breakdown = has_flag(argc, argv, "--breakdown");
+    std::cout << "BENCH_ITERS " << iters << "\n";
+    std::cout << "BENCH_BREAKDOWN " << (breakdown ? "true" : "false") << "\n";
 
-    std::cout << "BENCH_EVENTS " << br.n_events << "\n";
-    std::cout << "BENCH_ADD " << br.n_add << "\n";
-    std::cout << "BENCH_CANCEL " << br.n_cancel << "\n";
-    std::cout << "BENCH_FILLS " << br.n_fills << "\n";
-    std::cout << "BENCH_TRADED_QTY " << br.traded_qty << "\n";
+    const auto summary = hft::bench_repeat(loaded, pipeline, iters, breakdown);
 
-    std::cout << "BENCH_SECONDS " << br.seconds << "\n";
-    std::cout << "BENCH_EPS " << br.events_per_sec << "\n";
-    std::cout << "BENCH_FPS " << br.fills_per_sec << "\n";
-    std::cout << "BENCH_NS_PER_EVENT " << br.ns_per_event << "\n";
+    std::cout << "BENCH_EVENTS " << summary.n_events << "\n";
+    std::cout << "BENCH_EPS_MIN " << summary.eps_min << "\n";
+    std::cout << "BENCH_EPS_MEDIAN " << summary.eps_median << "\n";
+    std::cout << "BENCH_EPS_MAX " << summary.eps_max << "\n";
+
+    std::cout << "BENCH_NS_MIN " << summary.ns_min << "\n";
+    std::cout << "BENCH_NS_MEDIAN " << summary.ns_median << "\n";
+    std::cout << "BENCH_NS_MAX " << summary.ns_max << "\n";
 
     return 0;
   }
