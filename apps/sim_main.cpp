@@ -1,3 +1,4 @@
+#include "hft/bench.hpp"
 #include "hft/engine.hpp"
 #include "hft/generator.hpp"
 #include "hft/tape.hpp"
@@ -127,6 +128,26 @@ int main(int argc, char** argv) {
     return 1;
   }
   std::cout << "TAPE_LOADED_OK events=" << loaded.size() << "\n";
+  const bool bench = has_flag(argc, argv, "--bench");
+  std::cout << "BENCH_MODE " << (bench ? "true" : "false") << "\n";
+
+  if (bench) {
+    // Run once and print timing/throughput metrics.
+    const auto br = hft::bench_run(loaded);
+
+    std::cout << "BENCH_EVENTS " << br.n_events << "\n";
+    std::cout << "BENCH_ADD " << br.n_add << "\n";
+    std::cout << "BENCH_CANCEL " << br.n_cancel << "\n";
+    std::cout << "BENCH_FILLS " << br.n_fills << "\n";
+    std::cout << "BENCH_TRADED_QTY " << br.traded_qty << "\n";
+
+    std::cout << "BENCH_SECONDS " << br.seconds << "\n";
+    std::cout << "BENCH_EPS " << br.events_per_sec << "\n";
+    std::cout << "BENCH_FPS " << br.fills_per_sec << "\n";
+    std::cout << "BENCH_NS_PER_EVENT " << br.ns_per_event << "\n";
+
+    return 0;
+  }
 
   // Run #1 (from loaded tape)
   hft::Engine e1;
