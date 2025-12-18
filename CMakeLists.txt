@@ -15,6 +15,7 @@ add_library(hft_core
     src/generator.cpp
     src/bench.cpp
     src/pipeline.cpp
+    src/strategy_runner.cpp
 )
 
 target_include_directories(hft_core PUBLIC

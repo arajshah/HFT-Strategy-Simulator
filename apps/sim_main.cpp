@@ -2,6 +2,8 @@
 #include "hft/engine.hpp"
 #include "hft/generator.hpp"
 #include "hft/pipeline.hpp"
+#include "hft/strategy.hpp"
+#include "hft/strategy_runner.hpp"
 #include "hft/tape.hpp"
 
 #include <filesystem>
@@ -133,6 +135,38 @@ int main(int argc, char** argv) {
   std::cout << "BENCH_MODE " << (bench ? "true" : "false") << "\n";
   const bool pipeline = has_flag(argc, argv, "--pipeline");
   std::cout << "PIPELINE_MODE " << (pipeline ? "true" : "false") << "\n";
+
+  const std::string strat_name = get_str_arg(argc, argv, "--strategy", "none");
+  if (strat_name != "none") {
+    // Strategy mode ignores --bench/--pipeline for now (single-thread deterministic runner).
+    const std::size_t every = get_size_arg(argc, argv, "--strategy_every", 1000);
+    const std::uint64_t qty_u = get_u64_arg(argc, argv, "--strategy_qty", 10);
+    const std::string side_mode = get_str_arg(argc, argv, "--strategy_side", "alternate");
+
+    std::cout << "STRATEGY " << strat_name << "\n";
+    std::cout << "STRATEGY_EVERY " << every << "\n";
+    std::cout << "STRATEGY_QTY " << qty_u << "\n";
+    std::cout << "STRATEGY_SIDE " << side_mode << "\n";
+
+    if (strat_name != "periodic_taker") {
+      std::cout << "BAD_STRATEGY (use periodic_taker or none)\n";
+      return 1;
+    }
+
+    hft::PeriodicTakerStrategy strat(every, static_cast<std::int64_t>(qty_u), side_mode);
+    const auto sr = hft::run_strategy(loaded, strat);
+
+    std::cout << "STRAT_NAME " << sr.strategy_name << "\n";
+    std::cout << "STRAT_ACTIONS " << sr.n_actions << "\n";
+    std::cout << "STRAT_FILLS " << sr.n_fills << "\n";
+    std::cout << "STRAT_TRADED_QTY " << sr.traded_qty << "\n";
+    std::cout << "STRAT_POS " << sr.final_position << "\n";
+    std::cout << "STRAT_MID " << sr.final_mid << "\n";
+    std::cout << "STRAT_CASH " << sr.cash << "\n";
+    std::cout << "STRAT_PNL_MTM " << sr.pnl_mtm << "\n";
+    std::cout << "STRAT_FINAL_TOP " << sr.final_top << "\n";
+    return 0;
+  }
 
   if (bench) {
     const std::size_t iters = get_size_arg(argc, argv, "--iters", 1);
