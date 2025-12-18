@@ -161,12 +161,14 @@ int main(int argc, char** argv) {
     r1 = hft::pipeline_run(loaded);
     r2 = hft::pipeline_run(loaded);
   } else {
+    // Run #1 (from loaded tape)
     hft::Engine e1;
     r1 = e1.run(loaded);
+
+    // Run #2 (replay same loaded tape into a fresh engine)
     hft::Engine e2;
     r2 = e2.run(loaded);
   }
-
   const auto sig1 = hft::fills_signature(r1.fills);
   const auto sig2 = hft::fills_signature(r2.fills);
 
