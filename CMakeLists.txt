@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_library(hft_core
     src/order_book.cpp
     src/engine.cpp
+    src/tape.cpp
 )
 
 target_include_directories(hft_core PUBLIC
