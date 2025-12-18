@@ -57,6 +57,8 @@ void OrderBook::debug_assert_invariants() const {
           assert(it != live_.end() && "order in book missing from live_ index");
           assert(it->second.side == Side::Buy && "live_ side mismatch for resting bid");
           assert(it->second.price_ticks == px && "live_ price mismatch for resting bid");
+          // Iterator must point to this exact element.
+          assert(&(*it->second.it) == &o && "live_ iterator does not point to the correct bid order");
         }
       }
     } else {
@@ -71,6 +73,7 @@ void OrderBook::debug_assert_invariants() const {
           assert(it != live_.end() && "order in book missing from live_ index");
           assert(it->second.side == Side::Sell && "live_ side mismatch for resting ask");
           assert(it->second.price_ticks == px && "live_ price mismatch for resting ask");
+          assert(&(*it->second.it) == &o && "live_ iterator does not point to the correct ask order");
         }
       }
     }
@@ -152,8 +155,10 @@ std::vector<Fill> OrderBook::add_limit(const Order& incoming) {
 
     // Rest remaining as a bid at taker.price_ticks (FIFO at level)
     if (taker.qty > 0) {
-      bids_[taker.price_ticks].push_back(taker);
-      live_[taker.id] = Loc{.side = Side::Buy, .price_ticks = taker.price_ticks};
+      auto& q = bids_[taker.price_ticks];
+      q.push_back(taker);
+      auto it = std::prev(q.end());
+      live_[taker.id] = Loc{.side = Side::Buy, .price_ticks = taker.price_ticks, .it = it};
     }
 
   } else {  // Side::Sell
@@ -191,8 +196,10 @@ std::vector<Fill> OrderBook::add_limit(const Order& incoming) {
 
     // Rest remaining as an ask at taker.price_ticks (FIFO at level)
     if (taker.qty > 0) {
-      asks_[taker.price_ticks].push_back(taker);
-      live_[taker.id] = Loc{.side = Side::Sell, .price_ticks = taker.price_ticks};
+      auto& q = asks_[taker.price_ticks];
+      q.push_back(taker);
+      auto it = std::prev(q.end());
+      live_[taker.id] = Loc{.side = Side::Sell, .price_ticks = taker.price_ticks, .it = it};
     }
   }
 
@@ -211,38 +218,50 @@ bool OrderBook::cancel(Order::OrderId id) {
   if (loc.side == Side::Buy) {
     auto lvl_it = bids_.find(loc.price_ticks);
     if (lvl_it == bids_.end()) {
+#ifndef NDEBUG
+      assert(false && "live_ points to missing bid level");
+#endif
       live_.erase(it);
+      debug_assert_invariants();
       return false;
     }
 
     auto& q = lvl_it->second;
-    for (auto oq = q.begin(); oq != q.end(); ++oq) {
-      if (oq->id == id) {
-        q.erase(oq);
-        live_.erase(it);
-        erase_level_if_empty(Side::Buy, loc.price_ticks);
-        debug_assert_invariants();
-        return true;
-      }
-    }
+
+#ifndef NDEBUG
+    assert(loc.it != q.end() && "stored iterator is end()");
+    assert(loc.it->id == id && "stored iterator does not match id (bid)");
+#endif
+
+    q.erase(loc.it);
+    live_.erase(it);
+    erase_level_if_empty(Side::Buy, loc.price_ticks);
+    debug_assert_invariants();
+    return true;
 
   } else {  // Side::Sell
     auto lvl_it = asks_.find(loc.price_ticks);
     if (lvl_it == asks_.end()) {
+#ifndef NDEBUG
+      assert(false && "live_ points to missing ask level");
+#endif
       live_.erase(it);
+      debug_assert_invariants();
       return false;
     }
 
     auto& q = lvl_it->second;
-    for (auto oq = q.begin(); oq != q.end(); ++oq) {
-      if (oq->id == id) {
-        q.erase(oq);
-        live_.erase(it);
-        erase_level_if_empty(Side::Sell, loc.price_ticks);
-        debug_assert_invariants();
-        return true;
-      }
-    }
+
+#ifndef NDEBUG
+    assert(loc.it != q.end() && "stored iterator is end()");
+    assert(loc.it->id == id && "stored iterator does not match id (ask)");
+#endif
+
+    q.erase(loc.it);
+    live_.erase(it);
+    erase_level_if_empty(Side::Sell, loc.price_ticks);
+    debug_assert_invariants();
+    return true;
   }
 
 #ifndef NDEBUG

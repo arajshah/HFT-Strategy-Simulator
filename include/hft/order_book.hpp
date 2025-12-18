@@ -3,8 +3,8 @@
 #include "hft/order.hpp"
 
 #include <cstdint>
-#include <deque>
 #include <functional>
+#include <list>
 #include <map>
 #include <optional>
 #include <string>
@@ -40,7 +40,7 @@ class OrderBook {
   void debug_assert_invariants() const;
 
  private:
-  using Queue = std::deque<Order>;
+  using Queue = std::list<Order>;
 
   // Price-level maps:
   // - bids_: highest price first
@@ -51,6 +51,7 @@ class OrderBook {
   struct Loc {
     Side side{};
     std::int64_t price_ticks{};
+    Queue::iterator it{};  // iterator to the resting order in its price level
   };
 
   // Live order index: id -> (side, price_level)
