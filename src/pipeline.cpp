@@ -1,40 +1,17 @@
 #include "hft/pipeline.hpp"
 
 #include "hft/order_book.hpp"
+#include "hft/spsc_ring.hpp"
 
 #include <algorithm>
-#include <condition_variable>
-#include <deque>
-#include <mutex>
-#include <optional>
 #include <thread>
 
 namespace hft {
 namespace {
 
-template <typename T>
-class BlockingQueue {
- public:
-  void push(T v) {
-    {
-      std::lock_guard<std::mutex> lk(mu_);
-      q_.push_back(std::move(v));
-    }
-    cv_.notify_one();
-  }
-
-  T pop() {
-    std::unique_lock<std::mutex> lk(mu_);
-    cv_.wait(lk, [&] { return !q_.empty(); });
-    T v = std::move(q_.front());
-    q_.pop_front();
-    return v;
-  }
-
- private:
-  std::mutex mu_;
-  std::condition_variable cv_;
-  std::deque<T> q_;
+struct PipeMsg {
+  bool is_end{false};
+  Event e{};
 };
 
 }  // namespace
@@ -47,7 +24,9 @@ RunResult pipeline_run(std::vector<Event> events) {
               return a.seq < b.seq;
             });
 
-  BlockingQueue<std::optional<Event>> q;
+  // Lock-free SPSC queue between producer and consumer.
+  // Power-of-two capacity; small enough to avoid huge memory, large enough for throughput.
+  SpscRing<PipeMsg> q(1u << 16);
 
   RunResult out;
 
@@ -55,11 +34,15 @@ RunResult pipeline_run(std::vector<Event> events) {
   std::thread consumer([&]() {
     OrderBook book;
 
+    PipeMsg msg{};
     while (true) {
-      std::optional<Event> item = q.pop();
-      if (!item.has_value()) break;
+      while (!q.try_pop(msg)) {
+        std::this_thread::yield();
+      }
 
-      const Event& e = *item;
+      if (msg.is_end) break;
+
+      const Event& e = msg.e;
       switch (e.type) {
         case EventType::AddLimit: {
           auto fills = book.add_limit(e.order);
@@ -81,9 +64,18 @@ RunResult pipeline_run(std::vector<Event> events) {
   // Producer: feeds already-sorted events
   std::thread producer([&]() {
     for (const auto& e : events) {
-      q.push(std::optional<Event>(e));
+      PipeMsg m;
+      m.is_end = false;
+      m.e = e;
+      while (!q.try_push(m)) {
+        std::this_thread::yield();
+      }
     }
-    q.push(std::nullopt);  // sentinel
+    PipeMsg end;
+    end.is_end = true;
+    while (!q.try_push(end)) {
+      std::this_thread::yield();
+    }
   });
 
   producer.join();
