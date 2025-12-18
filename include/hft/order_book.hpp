@@ -36,6 +36,9 @@ class OrderBook {
   // Debug view (small string snapshot).
   std::string to_string_top() const;
 
+  // Debug-only: asserts internal invariants when compiled without NDEBUG.
+  void debug_assert_invariants() const;
+
  private:
   using Queue = std::deque<Order>;
 
@@ -54,6 +57,10 @@ class OrderBook {
   std::unordered_map<Order::OrderId, Loc> live_;
 
   static std::int64_t level_total_qty(const Queue& q);
+
+  // Internal helpers
+  bool has_live_id(Order::OrderId id) const;
+  void erase_level_if_empty(Side side, std::int64_t price_ticks);
 };
 
 }  // namespace hft
