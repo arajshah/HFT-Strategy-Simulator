@@ -1,3 +1,6 @@
+// Engine: replays a deterministically sorted event stream through the
+// order book, collects the fills, and records the final top of book.
+
 #include "hft/engine.hpp"
 
 #include <algorithm>
@@ -57,4 +60,3 @@ std::string fills_signature(const std::vector<Fill>& fills) {
 }
 
 }  // namespace hft
-
