@@ -1,3 +1,7 @@
+// Deterministic event generator: seeds a symmetric book around the mid
+// price, then emits adds and cancels from a small xorshift RNG, with a
+// fraction of aggressive orders that cross the spread to create fills.
+
 #include "hft/generator.hpp"
 
 #include "hft/order.hpp"
@@ -142,4 +146,3 @@ std::vector<Event> generate_events_gen_v1(std::uint64_t seed,
 }
 
 }  // namespace hft
-
