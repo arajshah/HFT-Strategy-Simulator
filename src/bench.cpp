@@ -1,3 +1,7 @@
+// Benchmark harness for the simulator: times the engine and the pipeline
+// over a replayed event stream and reports events per second and
+// nanoseconds per event, including per-iteration breakdowns.
+
 #include "hft/bench.hpp"
 
 #include "hft/engine.hpp"
@@ -155,4 +159,3 @@ BenchSummary bench_repeat(std::vector<Event> events,
 }
 
 }  // namespace hft
-
