@@ -1,3 +1,6 @@
+// Limit order book: price-time priority matching for limit adds and
+// cancels, with best bid and ask, level quantities, and invariant checks.
+
 #include "hft/order_book.hpp"
 
 #include <algorithm>
@@ -290,4 +293,3 @@ std::string OrderBook::to_string_top() const {
 }
 
 }  // namespace hft
-
