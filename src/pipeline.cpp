@@ -1,3 +1,6 @@
+// Pipeline: replays the event stream through the staged pipeline version
+// of the engine instead of the single-threaded run.
+
 #include "hft/pipeline.hpp"
 
 #include "hft/order_book.hpp"
@@ -93,4 +96,3 @@ RunResult pipeline_run(std::vector<Event> events) {
 }
 
 }  // namespace hft
-
