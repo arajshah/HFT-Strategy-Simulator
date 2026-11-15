@@ -1,3 +1,6 @@
+// Tape: CSV reading and writing for recorded event streams, including
+// side and event-type conversion and integer parsing helpers.
+
 #include "hft/tape.hpp"
 
 #include <filesystem>
@@ -171,4 +174,3 @@ std::vector<Event> read_events_csv(const std::string& path,
 }
 
 }  // namespace hft
-
