@@ -1,3 +1,6 @@
+// Strategy runner: replays a recorded tape through the order book and
+// feeds the evolving mid price to a strategy, collecting its run result.
+
 #include "hft/strategy_runner.hpp"
 
 #include "hft/order.hpp"
@@ -170,4 +173,3 @@ StrategyRunResult run_strategy(const std::vector<Event>& tape_events, Strategy& 
 }
 
 }  // namespace hft
-
