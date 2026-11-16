@@ -1,3 +1,8 @@
+// SpscRing: a lock-free single-producer single-consumer ring buffer.
+//
+// Used to pass events between the pipeline stages without locking;
+// the producer owns the tail and the consumer owns the head.
+
 #pragma once
 
 #include <atomic>
@@ -52,4 +57,3 @@ class SpscRing {
 };
 
 }  // namespace hft
-
