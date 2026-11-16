@@ -1,3 +1,8 @@
+// Order: a single limit order resting in or entering the book.
+//
+// Price is stored in integer ticks and quantity is the remaining amount;
+// side distinguishes bids from asks.
+
 #pragma once
 
 #include <cstdint>
@@ -16,4 +21,3 @@ struct Order {
 };
 
 }  // namespace hft
-
