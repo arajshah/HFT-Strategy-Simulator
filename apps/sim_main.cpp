@@ -1,3 +1,8 @@
+// sim_main: command-line entry point for the HFT strategy simulator.
+//
+// Loads a tape of events from CSV, optionally generates one, and runs
+// the matching engine twice to verify deterministic replay.
+
 #include "hft/bench.hpp"
 #include "hft/engine.hpp"
 #include "hft/generator.hpp"
@@ -219,4 +224,3 @@ int main(int argc, char** argv) {
   std::cout << "REPLAY_MISMATCH\n";
   return 1;
 }
-
