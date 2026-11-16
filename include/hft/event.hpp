@@ -1,3 +1,8 @@
+// Event: a single timestamped action for the matching engine.
+//
+// An event is either an add-limit order or a cancel, identified by a
+// timestamp and a sequence number that breaks ties deterministically.
+
 #pragma once
 
 #include "hft/order.hpp"
@@ -39,4 +44,3 @@ struct Event {
 };
 
 }  // namespace hft
-
