@@ -1,3 +1,4 @@
+// Deterministic event generator for benchmarks and the pipeline runner.
 #pragma once
 
 #include "hft/event.hpp"
