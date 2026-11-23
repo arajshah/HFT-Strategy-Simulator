@@ -1,3 +1,4 @@
+// Benchmark harness: runs the engine over generated events and reports timing and counts.
 #pragma once
 
 #include "hft/event.hpp"
