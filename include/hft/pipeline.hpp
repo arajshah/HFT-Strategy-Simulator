@@ -1,3 +1,4 @@
+// Producer/consumer pipeline runner: same results as the engine, via one writer thread.
 #pragma once
 
 #include "hft/engine.hpp"  // RunResult
