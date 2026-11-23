@@ -1,3 +1,4 @@
+// Strategy interface and the periodic taker baseline: one aggressive order every N events.
 #pragma once
 
 #include "hft/event.hpp"
