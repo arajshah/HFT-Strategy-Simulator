@@ -1,3 +1,4 @@
+// Matching engine: applies a sorted event stream to one order book and returns fills.
 #pragma once
 
 #include "hft/event.hpp"
