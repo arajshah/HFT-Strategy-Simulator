@@ -1,3 +1,4 @@
+// Price-time priority order book with best bid/ask lookup and cancel support.
 #pragma once
 
 #include "hft/order.hpp"
