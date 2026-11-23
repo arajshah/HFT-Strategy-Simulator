@@ -1,3 +1,4 @@
+// Strategy runner: replays the tape through one order book and tracks fills and PnL.
 #pragma once
 
 #include "hft/event.hpp"
