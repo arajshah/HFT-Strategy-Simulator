@@ -1,3 +1,4 @@
+// CSV tape reader and writer for the versioned event format.
 #pragma once
 
 #include "hft/event.hpp"
