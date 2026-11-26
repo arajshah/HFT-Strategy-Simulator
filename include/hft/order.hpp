@@ -2,6 +2,7 @@
 //
 // Price is stored in integer ticks and quantity is the remaining amount;
 // side distinguishes bids from asks.
+// Orders match in price-time priority, FIFO within a price level.
 
 #pragma once
 
