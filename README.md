@@ -105,4 +105,6 @@ You should see REPLAY_OK.
 - `include/hft/` — core headers (order book, engine, generator, pipeline, bench, strategies)
 - `src/` — implementations
 - `apps/sim_main.cpp` — CLI entrypoint
+- `CMakeLists.txt` — build definition for the hft_sim CLI
+- `requirements.md` / `run_order.md` — toolchain notes and the repro checklist
 - `out/` — generated tapes (created at runtime)
