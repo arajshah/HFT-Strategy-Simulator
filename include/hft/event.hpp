@@ -2,6 +2,7 @@
 //
 // An event is either an add-limit order or a cancel, identified by a
 // timestamp and a sequence number that breaks ties deterministically.
+// Events are sorted by timestamp, then sequence, before processing.
 
 #pragma once
 
