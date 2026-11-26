@@ -1,3 +1,5 @@
+# Build the hft_sim CLI: C++20, no external dependencies.
+
 cmake_minimum_required(VERSION 3.20)
 project(hft_strategy_simulator LANGUAGES CXX)
 
